@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Text & Image Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📄 PDF Text & Image Extractor</h1>
+        <p class="subtitle">Extract text and images from PDF files directly in your browser</p>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-icon">📎</div>
+            <div class="drop-zone-text">Drop your PDF here</div>
+            <div class="drop-zone-hint">or click to browse</div>
+        </div>
+
+        <input type="file" id="fileInput" accept=".pdf">
+
+        <div class="options">
+            <h3>Extraction Options</h3>
+            <div class="option-group">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="extractText" checked>
+                    <label for="extractText">Extract text from PDF</label>
+                </div>
+                <div class="checkbox-container">
+                    <input type="checkbox" id="addPageNumbers" checked>
+                    <label for="addPageNumbers">Add page numbers as headers in markdown</label>
+                </div>
+                <div class="checkbox-container">
+                    <input type="checkbox" id="extractImages" checked>
+                    <label for="extractImages">Extract images from PDF</label>
+                </div>
+            </div>
+        </div>
+
+        <button class="process-btn" id="processBtn" disabled>Select a PDF to begin</button>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="status-message" id="statusMessage"></div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="results" id="results"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
