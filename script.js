@@ -157,32 +157,79 @@ async function extractImagesFromPage(page, pageNum) {
 
                     const imageData = ctx.createImageData(image.width, image.height);
 
-                    // Handle different image data formats
+                    // Handle different image data formats based on kind
                     if (image.data) {
                         const data = image.data;
-                        for (let j = 0; j < data.length; j += 3) {
-                            const offset = (j / 3) * 4;
-                            imageData.data[offset] = data[j];
-                            imageData.data[offset + 1] = data[j + 1];
-                            imageData.data[offset + 2] = data[j + 2];
-                            imageData.data[offset + 3] = 255;
+                        const kind = image.kind; // ImageKind: 1=Grayscale, 2=RGB, 3=RGBA
+
+                        if (kind === 1) {
+                            // Grayscale (1 byte per pixel)
+                            for (let j = 0; j < data.length; j++) {
+                                const offset = j * 4;
+                                const gray = data[j];
+                                imageData.data[offset] = gray;
+                                imageData.data[offset + 1] = gray;
+                                imageData.data[offset + 2] = gray;
+                                imageData.data[offset + 3] = 255;
+                            }
+                        } else if (kind === 2) {
+                            // RGB (3 bytes per pixel)
+                            for (let j = 0; j < data.length; j += 3) {
+                                const offset = (j / 3) * 4;
+                                imageData.data[offset] = data[j];
+                                imageData.data[offset + 1] = data[j + 1];
+                                imageData.data[offset + 2] = data[j + 2];
+                                imageData.data[offset + 3] = 255;
+                            }
+                        } else if (kind === 3) {
+                            // RGBA (4 bytes per pixel)
+                            imageData.data.set(data);
+                        } else {
+                            // Unknown format, try to handle as RGB
+                            const bytesPerPixel = Math.floor(data.length / (image.width * image.height));
+                            if (bytesPerPixel === 1) {
+                                // Likely grayscale
+                                for (let j = 0; j < data.length; j++) {
+                                    const offset = j * 4;
+                                    const gray = data[j];
+                                    imageData.data[offset] = gray;
+                                    imageData.data[offset + 1] = gray;
+                                    imageData.data[offset + 2] = gray;
+                                    imageData.data[offset + 3] = 255;
+                                }
+                            } else if (bytesPerPixel === 3) {
+                                // Likely RGB
+                                for (let j = 0; j < data.length; j += 3) {
+                                    const offset = (j / 3) * 4;
+                                    imageData.data[offset] = data[j];
+                                    imageData.data[offset + 1] = data[j + 1];
+                                    imageData.data[offset + 2] = data[j + 2];
+                                    imageData.data[offset + 3] = 255;
+                                }
+                            } else if (bytesPerPixel === 4) {
+                                // Likely RGBA
+                                imageData.data.set(data);
+                            }
                         }
                     } else if (image.bitmap) {
+                        // Bitmap data is already in RGBA format
                         imageData.data.set(image.bitmap);
                     }
 
                     ctx.putImageData(imageData, 0, 0);
 
                     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                    const url = URL.createObjectURL(blob);
+                    if (blob && blob.size > 0) {
+                        const url = URL.createObjectURL(blob);
 
-                    images.push({
-                        name: `page-${pageNum}-image-${images.length + 1}.png`,
-                        url: url,
-                        blob: blob,
-                        width: image.width,
-                        height: image.height
-                    });
+                        images.push({
+                            name: `page-${pageNum}-image-${images.length + 1}.png`,
+                            url: url,
+                            blob: blob,
+                            width: image.width,
+                            height: image.height
+                        });
+                    }
                 }
             } catch (err) {
                 console.warn(`Could not extract image ${imageName} from page ${pageNum}:`, err);
