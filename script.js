@@ -141,8 +141,11 @@ async function extractImagesFromPage(page, pageNum) {
     const ops = await page.getOperatorList();
 
     for (let i = 0; i < ops.fnArray.length; i++) {
+        // Check for all image paint operations
         if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject ||
-            ops.fnArray[i] === pdfjsLib.OPS.paintJpegXObject) {
+            ops.fnArray[i] === pdfjsLib.OPS.paintJpegXObject ||
+            ops.fnArray[i] === pdfjsLib.OPS.paintInlineImageXObject ||
+            ops.fnArray[i] === pdfjsLib.OPS.paintImageMaskXObject) {
 
             const imageName = ops.argsArray[i][0];
 
@@ -150,12 +153,18 @@ async function extractImagesFromPage(page, pageNum) {
                 const image = await page.objs.get(imageName);
 
                 if (image && image.width && image.height) {
+                    // Skip very small images (likely artifacts or decorative elements)
+                    if (image.width < 10 || image.height < 10) {
+                        continue;
+                    }
+
                     const canvas = document.createElement('canvas');
                     canvas.width = image.width;
                     canvas.height = image.height;
-                    const ctx = canvas.getContext('2d');
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
                     const imageData = ctx.createImageData(image.width, image.height);
+                    let imageProcessed = false;
 
                     // Handle different image data formats based on kind
                     if (image.data) {
@@ -172,6 +181,7 @@ async function extractImagesFromPage(page, pageNum) {
                                 imageData.data[offset + 2] = gray;
                                 imageData.data[offset + 3] = 255;
                             }
+                            imageProcessed = true;
                         } else if (kind === 2) {
                             // RGB (3 bytes per pixel)
                             for (let j = 0; j < data.length; j += 3) {
@@ -181,11 +191,13 @@ async function extractImagesFromPage(page, pageNum) {
                                 imageData.data[offset + 2] = data[j + 2];
                                 imageData.data[offset + 3] = 255;
                             }
+                            imageProcessed = true;
                         } else if (kind === 3) {
                             // RGBA (4 bytes per pixel)
                             imageData.data.set(data);
+                            imageProcessed = true;
                         } else {
-                            // Unknown format, try to handle as RGB
+                            // Unknown format, try to auto-detect
                             const bytesPerPixel = Math.floor(data.length / (image.width * image.height));
                             if (bytesPerPixel === 1) {
                                 // Likely grayscale
@@ -197,6 +209,7 @@ async function extractImagesFromPage(page, pageNum) {
                                     imageData.data[offset + 2] = gray;
                                     imageData.data[offset + 3] = 255;
                                 }
+                                imageProcessed = true;
                             } else if (bytesPerPixel === 3) {
                                 // Likely RGB
                                 for (let j = 0; j < data.length; j += 3) {
@@ -206,29 +219,34 @@ async function extractImagesFromPage(page, pageNum) {
                                     imageData.data[offset + 2] = data[j + 2];
                                     imageData.data[offset + 3] = 255;
                                 }
+                                imageProcessed = true;
                             } else if (bytesPerPixel === 4) {
                                 // Likely RGBA
                                 imageData.data.set(data);
+                                imageProcessed = true;
                             }
                         }
                     } else if (image.bitmap) {
                         // Bitmap data is already in RGBA format
                         imageData.data.set(image.bitmap);
+                        imageProcessed = true;
                     }
 
-                    ctx.putImageData(imageData, 0, 0);
+                    if (imageProcessed) {
+                        ctx.putImageData(imageData, 0, 0);
 
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                    if (blob && blob.size > 0) {
-                        const url = URL.createObjectURL(blob);
+                        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                        if (blob && blob.size > 0) {
+                            const url = URL.createObjectURL(blob);
 
-                        images.push({
-                            name: `page-${pageNum}-image-${images.length + 1}.png`,
-                            url: url,
-                            blob: blob,
-                            width: image.width,
-                            height: image.height
-                        });
+                            images.push({
+                                name: `page-${pageNum}-image-${images.length + 1}.png`,
+                                url: url,
+                                blob: blob,
+                                width: image.width,
+                                height: image.height
+                            });
+                        }
                     }
                 }
             } catch (err) {
@@ -334,10 +352,34 @@ function downloadImage(img, index) {
     document.body.removeChild(a);
 }
 
-function downloadAllImages() {
-    extractedData.images.forEach((img, index) => {
-        setTimeout(() => downloadImage(img, index), index * 100);
-    });
+async function downloadAllImages() {
+    if (extractedData.images.length === 0) return;
+
+    // Create a new JSZip instance
+    const zip = new JSZip();
+    const imgFolder = zip.folder("images");
+
+    // Add each image to the zip
+    for (const img of extractedData.images) {
+        imgFolder.file(img.name, img.blob);
+    }
+
+    // Generate the zip file
+    try {
+        const content = await zip.generateAsync({ type: "blob" });
+
+        // Download the zip file
+        const url = URL.createObjectURL(content);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = selectedFile.name.replace('.pdf', '_images.zip');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        showError('Failed to create zip file: ' + err.message);
+    }
 }
 
 function showError(message) {
